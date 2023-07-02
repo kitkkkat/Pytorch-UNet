@@ -36,18 +36,27 @@ def unique_mask_values(idx, mask_dir, mask_suffix):
 
 
 class BasicDataset(Dataset):
-    def __init__(self, images_list: list, mask_list: list, scale: float = 1.0, mask_suffix: str = ''):
-        self.mask_dir = mask_list[0].parents[0]
+    def __init__(self, images_dir: str, mask_dir: str, scale: float = 1.0, mask_suffix: str = ''):
+        self.images_dir = Path(images_dir)
+        self.mask_dir = Path(mask_dir)
         assert 0 < scale <= 1, 'Scale must be between 0 and 1'
         self.scale = scale
         self.mask_suffix = mask_suffix
-        slef.images_dir = images_list[0].parents[0]
 
-        self.ids = [splitext(file[0])[0].split("/")[-1] for file in images_list]
+        self.ids = [splitext(file)[0] for file in listdir(images_dir) if isfile(join(images_dir, file)) and not file.startswith('.')]
         if not self.ids:
-            raise RuntimeError(f'No input file found in {images_list}, make sure you put your images there')
+            raise RuntimeError(f'No input file found in {images_dir}, make sure you put your images there')
+
+        logging.info(f'Creating dataset with {len(self.ids)} examples')
+        logging.info('Scanning mask files to determine unique values')
+        with Pool() as p:
+            unique = list(tqdm(
+                p.imap(partial(unique_mask_values, mask_dir=self.mask_dir, mask_suffix=self.mask_suffix), self.ids),
+                total=len(self.ids)
+            ))
 
         self.mask_values = list(sorted(np.unique(np.concatenate(unique), axis=0).tolist()))
+        logging.info(f'Unique mask values: {self.mask_values}')
 
     def __len__(self):
         return len(self.ids)
